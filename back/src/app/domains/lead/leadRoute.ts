@@ -34,6 +34,7 @@ class LeadRoute {
     { method: 'post', path: '/upsert', handler: this.controller.upsert , middleware: [auth] },
     { method: 'post', path: '/external', handler: this.controller.external , middleware: [] },
     { method: 'post', path: '/adviser-info', handler: this.controller.adviserInfo , middleware: [auth] },
+    { method: 'post', path: '/create', handler: this.controller.create , middleware: [auth] },
   ] 
 
   public init () {

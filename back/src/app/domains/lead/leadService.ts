@@ -3,7 +3,8 @@
 // @import_services
 
 // @import_models
-import { Lead, Campaign, Third, Adnetwork, Tracking, Message, Interaction } from "@app/models"
+import { Lead, Campaign, Third, Adnetwork, Tracking, Message, Interaction, Program } from "@app/models"
+import mongoose from "mongoose";
 
 // @import_utilities
 import { responseUtility } from "@core/utilities/responseUtility"
@@ -16,6 +17,46 @@ class LeadService {
   
   
   constructor () {}
+
+  public async create (_params) {
+    try {
+      const data = {
+        first_name: String(_params.first_name ?? '').trim(),
+        last_name: String(_params.last_name ?? '').trim(),
+        email: String(_params.email ?? '').trim().toLowerCase(),
+        mobile_phone: String(_params.mobile_phone ?? '').replace(/\D/g, ''),
+        interestProgram: _params.interestProgram,
+      }
+
+      const errors: Record<string, string> = {}
+      if (data.first_name.length < 2) errors.first_name = 'Nombre requerido'
+      if (data.last_name.length < 2) errors.last_name = 'Apellido requerido'
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'Correo inválido'
+      if (!/^\d{10}$/.test(data.mobile_phone)) errors.mobile_phone = 'Celular de 10 dígitos'
+      if (!mongoose.isValidObjectId(data.interestProgram)) errors.interestProgram = 'Selecciona un programa'
+      if (Object.keys(errors).length) {
+        return responseUtility.error('lead.invalid', null, { code: 400, errors })
+      }
+
+      const program = await Program.findOne({ _id: data.interestProgram }).lean()
+      if (!program) return responseUtility.error('program.not_found', null, { code: 404 })
+
+      const duplicated = await Lead.findOne({
+        $or: [{ email: data.email }, { mobile_phone: data.mobile_phone }],
+      }).lean()
+      if (duplicated) return responseUtility.error('lead.duplicated', null, { code: 409 })
+
+      const created = await Lead.create({
+        ...data,
+        full_name: `${data.first_name} ${data.last_name}`,
+      })
+
+      return responseUtility.success({ code: 201, object: created.toObject() })
+
+    } catch (error) {
+      return responseUtility.error('lead.create', null, { code: 500 })
+    }
+  }
   
   public async upsert (_params) {
     try{ 
@@ -261,20 +302,15 @@ class LeadService {
       }
       
       
-      let leads = await Lead.find(where)
-      .sort({created_at:-1})
-      .populate({
-        path: 'contact',
-        select: 'first_name last_name document number',
-        options: { lean:true }
-      })
-      .limit(100)
-      .lean()
-      
-      leads = leads.map(_l=>{
-        _l.full_name = `${_l.contact?.first_name} ${_l.contact?.last_name}`.trim()
-        return _l
-      })
+      const leads = await Lead.find(where)
+        .sort({ created_at: -1 })
+        .populate({
+          path: 'interestProgram',
+          select: 'name',
+          options: { lean: true }
+        })
+        .limit(100)
+        .lean()
       
       return responseUtility.success({
         list:leads
